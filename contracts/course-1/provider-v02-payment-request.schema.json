@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:course:course-1:provider-v02-payment-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operationId", "amount", "currency"],
+  "properties": {
+    "operationId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"},
+    "amount": {"type": "string", "pattern": "^(?:0\\.0[1-9]|0\\.[1-9][0-9]?|[1-9][0-9]{0,15}(?:\\.[0-9]{1,2})?)$"},
+    "currency": {"const": "RUB"}
+  }
+}

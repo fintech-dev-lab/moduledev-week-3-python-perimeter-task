@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:course:course-1:payment-submit-result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operationId", "processId", "flowName", "flowVersion", "status"],
+  "properties": {
+    "operationId": {"type": "string", "format": "uuid"},
+    "processId": {"type": "string", "format": "uuid"},
+    "flowName": {"enum": ["payment-processing", "payment-review"]},
+    "flowVersion": {"type": "integer", "minimum": 1},
+    "status": {"const": "PROCESSING"}
+  }
+}

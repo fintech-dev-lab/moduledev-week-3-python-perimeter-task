@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:course:course-1:workflow-manual-payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["processId", "stepInstanceId", "decision", "reason"],
+  "properties": {
+    "processId": {"type": "string", "format": "uuid"},
+    "stepInstanceId": {"type": "string", "format": "uuid"},
+    "decision": {"enum": ["APPROVED", "REJECTED"]},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 500}
+  }
+}

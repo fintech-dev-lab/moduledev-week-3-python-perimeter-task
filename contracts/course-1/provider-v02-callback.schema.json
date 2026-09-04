@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:course:course-1:provider-v02-callback",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["providerPaymentId", "operationId", "result", "message", "occurredAt"],
+  "properties": {
+    "providerPaymentId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"},
+    "operationId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"},
+    "result": {"enum": ["COMPLETED", "REJECTED"]},
+    "message": {"type": "string", "maxLength": 500},
+    "occurredAt": {"type": "string", "format": "date-time", "maxLength": 64, "pattern": "Z$"}
+  }
+}

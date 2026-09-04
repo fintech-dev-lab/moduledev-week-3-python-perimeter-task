@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:course:course-1:workflow-manual-result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decisionId", "processId", "stepInstanceId", "decision", "source", "principal"],
+  "properties": {
+    "decisionId": {"type": "string", "format": "uuid"},
+    "processId": {"type": "string", "format": "uuid"},
+    "stepInstanceId": {"type": "string", "format": "uuid"},
+    "decision": {"enum": ["APPROVED", "REJECTED"]},
+    "source": {"const": "MANUAL"},
+    "principal": {"type": "string", "minLength": 1, "maxLength": 128}
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "operationKind": "PAYMENT_EXECUTION",
+  "amount": "1000.00",
+  "currency": "RUB"
+}

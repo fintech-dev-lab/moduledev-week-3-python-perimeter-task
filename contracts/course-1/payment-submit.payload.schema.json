@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:course:course-1:payment-submit-payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operationId"],
+  "properties": {
+    "operationId": {"type": "string", "format": "uuid"}
+  }
+}

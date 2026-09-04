@@ -1,0 +1,36 @@
+{
+  "contractVersion": "course-1",
+  "generatorVersion": "week-3.1",
+  "digest": "1f83c074ea60ae3941f75dd48e1526030ebdd5e467a66753e1c6a1c06c67c059",
+  "provider": {
+    "image": "ghcr.io/fintech-dev-lab/internship-provider-simulator:v0.2.0@sha256:70e5e0dd9ab8425be84de431ec74516f9bedf5d5529077358e2e2b2037fe0c74",
+    "callbackPath": "/callbacks/provider-v02/{capability}"
+  },
+  "services": [
+    "gateway",
+    "api",
+    "cli",
+    "postgres",
+    "worker-a",
+    "worker-b",
+    "outbox-dispatcher",
+    "receipt-adapter",
+    "inbox-reconciler",
+    "provider-simulator"
+  ],
+  "files": {
+    "providerRequest": "data/request-provider.json",
+    "adapterRequest": "data/request-adapter.json",
+    "reviewAutoRequest": "data/request-review-auto.json",
+    "reviewManualRequest": "data/request-review-manual.json"
+  },
+  "flows": {
+    "provider": "payment-processing",
+    "review": "payment-review",
+    "version": 1
+  },
+  "limit": {
+    "amount": "100000.00",
+    "ruleVersion": "course-limit-v1"
+  }
+}

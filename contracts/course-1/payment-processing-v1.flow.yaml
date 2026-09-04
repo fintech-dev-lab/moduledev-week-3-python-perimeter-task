@@ -1,0 +1,80 @@
+contract_version: course-1
+flow_name: payment-processing
+version: 1
+start_step: validate_operation
+steps:
+  - key: validate_operation
+    type: automatic
+    task:
+      service: postgres
+      module: payment
+      action: validate
+      action_version: 1
+      required_policy: [payment:internal]
+      timeout_ms: 2000
+      retry: {max_attempts: 1, delays_ms: []}
+      input_mapping: {/operationId: /operationId}
+      input_constants: {}
+  - key: prepare_external_request
+    type: automatic
+    task:
+      service: postgres
+      module: payment
+      action: prepare_external
+      action_version: 1
+      required_policy: [payment:internal]
+      timeout_ms: 2000
+      retry: {max_attempts: 3, delays_ms: [200, 400]}
+      input_mapping: {/operationId: /operationId}
+      input_constants: {}
+  - key: wait_receipt
+    type: wait_signal
+    signal_type: payment.receipt
+    outcome: RECEIVED
+  - key: apply_receipt
+    type: automatic
+    task:
+      service: postgres
+      module: payment
+      action: apply_receipt
+      action_version: 1
+      required_policy: [payment:internal]
+      timeout_ms: 2000
+      retry: {max_attempts: 2, delays_ms: [200]}
+      input_mapping: {/operationId: /operationId}
+      input_constants: {}
+  - key: complete_operation
+    type: automatic
+    task:
+      service: postgres
+      module: payment
+      action: complete
+      action_version: 1
+      required_policy: [payment:internal]
+      timeout_ms: 2000
+      retry: {max_attempts: 2, delays_ms: [200]}
+      input_mapping: {/operationId: /operationId}
+      input_constants: {}
+  - key: reject_operation
+    type: automatic
+    task:
+      service: postgres
+      module: payment
+      action: reject
+      action_version: 1
+      required_policy: [payment:internal]
+      timeout_ms: 2000
+      retry: {max_attempts: 2, delays_ms: [200]}
+      input_mapping: {/operationId: /operationId}
+      input_constants: {}
+  - key: done
+    type: end
+    outcome: FINISHED
+transitions:
+  - {from: validate_operation, outcome: VALID, to: prepare_external_request}
+  - {from: prepare_external_request, outcome: PREPARED, to: wait_receipt}
+  - {from: wait_receipt, outcome: RECEIVED, to: apply_receipt}
+  - {from: apply_receipt, outcome: COMPLETED, to: complete_operation}
+  - {from: apply_receipt, outcome: REJECTED, to: reject_operation}
+  - {from: complete_operation, outcome: COMPLETED, to: done}
+  - {from: reject_operation, outcome: REJECTED, to: done}

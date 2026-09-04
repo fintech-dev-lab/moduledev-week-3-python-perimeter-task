@@ -1,0 +1,16 @@
+{
+  "manifestVersion": "week-3.1",
+  "contractVersion": "course-1",
+  "week": 3,
+  "maximum": 25,
+  "cumulativeMaximum": 70,
+  "criteria": [
+    {"id": "BNK-01", "weight": 3, "invariant": "Request creates one operation and submit creates one pinned process", "evidence": ["submit.concurrent-single-process", "submit.atomic-operation-process-event", "submit.server-side-flow-binding"]},
+    {"id": "BNK-02", "weight": 3, "invariant": "payment-processing completes only from a persisted applied receipt", "evidence": ["receipt.completed-branch", "receipt.rejected-branch", "receipt.client-final-status-ignored"]},
+    {"id": "BNK-03", "weight": 3, "invariant": "Provider, Python adapter, signed receipt and Inbox preserve the trust boundary", "evidence": ["python.single-local-image", "adapter.legacy-v02-mapping", "adapter.exact-signed-body", "receipt.invalid-input-no-mutation"]},
+    {"id": "BNK-04", "weight": 3, "invariant": "payment-review executes automatic and manual branches through the generic core", "evidence": ["review.limit-rule-branch", "review.manual-wait-branch", "review.no-flow-name-switch"]},
+    {"id": "BNK-05", "weight": 3, "invariant": "Every final result has a receipt or audited decision", "evidence": ["final.receipt-evidence", "final.limit-decision-evidence", "final.manual-decision-evidence"]},
+    {"id": "PG-02", "weight": 5, "invariant": "Action effect, job completion, state and event are atomic", "evidence": ["postgres.submit-atomicity", "postgres.prepare-outbox-atomicity", "postgres.manual-transition-atomicity"]},
+    {"id": "PG-05", "weight": 5, "invariant": "Python delivery loops and Outbox/Inbox do not lose or duplicate messages", "evidence": ["outbox.dispatcher-stop-resume", "outbox.provider-lost-response-single-payment", "inbox.early-receipt", "inbox.duplicate-conflict", "inbox.reconciler-recreate", "postgres.integration-role-least-privilege"]}
+  ]
+}

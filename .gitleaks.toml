@@ -1,0 +1,9 @@
+title = "ModuleDev week 3 public package"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Published provider image digest"
+paths = ['''(^|/)README\.md$''', '''(^|/)fixture\.json$''', '''(^|/)public_check\.py$''']
+regexes = ['''sha256:70e5e0dd9ab8425be84de431ec74516f9bedf5d5529077358e2e2b2037fe0c74''']

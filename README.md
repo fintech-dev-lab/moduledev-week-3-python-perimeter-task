@@ -1,7 +1,5 @@
 # Неделя 3. Python-периметр
 
-> **READY.** Контракты, fixtures и checker проверены на эталонном продолжении недели 2. Восемь обязательных provider modes подтверждены сохранённым domain/provider evidence внутренней release matrix; два ошибочных assertion по PascalCase event names исправлены отдельно. Повторные cold Docker E2E сняты release-решением после инфраструктурных сбоев локального Docker-host.
-
 Это продолжение заданий недель 1 и 2 в том же репозитории участника. C# gateway/API/worker и PostgreSQL workflow остаются ядром. Участник добавляет один Python 3.12+ integration image с тремя entrypoints: `outbox-dispatcher`, `receipt-adapter`, `inbox-reconciler`.
 
 ## Материалы

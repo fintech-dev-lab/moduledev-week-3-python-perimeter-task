@@ -7,6 +7,9 @@
 - [Условие задания](task/assignment.md)
 - [Памятка участника](task/student-handout.md)
 - [Контракт проверки](autocheck/README.md)
+- [Действующая редакция полного контракта](docs/README.md)
+- [Внешние HTTP-контракты](docs/external-contracts.md)
+- [Конфигурация и запуск checker](docs/configuration.md)
 - [Machine-readable contracts](contracts/course-1)
 - [Выданная карта payment-processing v1](contracts/course-1/payment-processing-v1.flow.yaml)
 
@@ -19,8 +22,10 @@ Python dispatcher доставляет durable Outbox в provider v0.2.0, Python
 Требуются Python 3.11+ для checker, Docker Engine и Docker Compose v2 с `!override`, `!reset` и `config --no-env-resolution`.
 
 ```bash
-./check.sh
+./check.sh --repo /path/to/participant-solution
 ```
+
+Репозиторий checker не копируется в решение и не заменяет `check.sh` предыдущих недель.
 
 Checker:
 

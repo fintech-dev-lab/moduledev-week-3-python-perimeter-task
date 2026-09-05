@@ -5,7 +5,9 @@ import hashlib
 import importlib.util
 import io
 import json
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -23,7 +25,6 @@ SPEC.loader.exec_module(public_check)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 PACKAGE = Path(__file__).resolve().parents[2]
-ROOT = PACKAGE.parent
 
 
 class FixtureTests(unittest.TestCase):
@@ -107,10 +108,11 @@ class ReceiptContractTests(unittest.TestCase):
         }
         with self.assertRaises(ValueError):
             public_check.normalized_receipt({**base, "unknown": True})
-        with self.assertRaises(ValueError):
-            public_check.normalized_receipt(
-                {**base, "providerPaymentId": "provider\r\nheader"}
-            )
+        for field in ("providerPaymentId", "operationId", "occurredAt", "message"):
+            for value in ("\rprefix", "middle\nvalue", "suffix\r"):
+                with self.subTest(field=field, value=repr(value)):
+                    with self.assertRaises(ValueError):
+                        public_check.normalized_receipt({**base, field: value})
 
     def test_duplicate_and_conflict_keep_one_message_identity(self) -> None:
         base = {
@@ -202,6 +204,39 @@ class ComposeAdmissionTests(unittest.TestCase):
             public_check._published_ports({"ports": ["18080-18082:8080-8082"]}),
             {18080, 18081, 18082},
         )
+
+    def test_source_and_runtime_gateway_ports_are_checked_separately(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            source = self._safe_config(repo)
+            self.assertEqual(public_check._compose_contract_findings(source, repo), [])
+            runtime = json.loads(json.dumps(source))
+            runtime["services"]["gateway"]["ports"] = [
+                {"host_ip": "127.0.0.1", "published": "43123", "target": 8080}
+            ]
+            self.assertEqual(public_check._runtime_compose_findings(runtime, 43123), [])
+            self.assertTrue(public_check._compose_contract_findings(runtime, repo))
+
+    def test_candidate_config_forces_contract_port_before_runtime_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            harness = public_check.ComposeHarness(
+                repo=root,
+                compose_file=root / "compose.yaml",
+                override_file=root / "override.yaml",
+                wrapper=root / "wrapper.sh",
+                project="project",
+                gateway_port=43123,
+                environment={"COURSE_GATEWAY_PORT": "43123"},
+                sensitive=(),
+            )
+            response = public_check.CommandResult(("compose",), 0, "{}", "")
+            with mock.patch.object(harness, "compose", return_value=response) as compose:
+                harness.candidate_config()
+            self.assertEqual(
+                compose.call_args.kwargs["environment"],
+                {"COURSE_GATEWAY_PORT": "8080"},
+            )
 
     def test_digest_only_provider_reference_is_accepted(self) -> None:
         digest = public_check.PROVIDER_IMAGE.rsplit("@", 1)[1]
@@ -351,6 +386,31 @@ class ComposeAdmissionTests(unittest.TestCase):
             self.assertEqual(len(findings), 2)
             self.assertTrue(any("outbox-dispatcher.LEAK" in item for item in findings))
             self.assertTrue(any("outside api environment" in item for item in findings))
+
+    def test_database_secret_allows_recipient_environment_only(self) -> None:
+        secret = "synthetic-database-secret"
+        config = {
+            "services": {
+                "postgres": {"environment": {"ROLE_PASSWORD": secret}},
+                "worker-a": {"environment": {"COURSE_DB_PASSWORD": secret}},
+                "receipt-adapter": {"environment": {"LEAK": secret}},
+            }
+        }
+        findings = public_check._secret_distribution_findings(
+            config,
+            {
+                "worker-password": (
+                    secret,
+                    {("postgres", "*"), ("worker-a", "*")},
+                )
+            },
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertIn("receipt-adapter.LEAK", findings[0])
+
+    def test_cli_is_declared_but_not_required_to_keep_running(self) -> None:
+        self.assertIn("cli", public_check.REQUIRED_SERVICES)
+        self.assertNotIn("cli", public_check.RUNNING_SERVICES)
 
     def test_host_escape_and_extra_ports_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -610,6 +670,20 @@ class PollingTests(unittest.TestCase):
             )
 
 
+class ActionResultTests(unittest.TestCase):
+    def test_repeat_ignores_transport_meta_but_not_business_result(self) -> None:
+        first = {
+            "status": "ok",
+            "outcome": "APPROVED",
+            "result": {"decision": "APPROVED"},
+            "meta": {"correlationId": "first"},
+        }
+        repeated = {**first, "meta": {"correlationId": "second"}}
+        changed = {**repeated, "result": {"decision": "REJECTED"}}
+        self.assertTrue(public_check.same_action_result(first, repeated))
+        self.assertFalse(public_check.same_action_result(first, changed))
+
+
 class ProjectionContractTests(unittest.TestCase):
     def test_published_column_types_are_explicit(self) -> None:
         self.assertEqual(public_check._expected_column_type("process_id"), "uuid")
@@ -638,15 +712,8 @@ class MachineArtifactTests(unittest.TestCase):
             {item["id"] for item in manifest["criteria"]},
             {"BNK-01", "BNK-02", "BNK-03", "BNK-04", "BNK-05", "PG-02", "PG-05"},
         )
-        canonical = json.loads(
-            (ROOT / "contracts" / "course-1" / "week-3-score-manifest.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        self.assertEqual(manifest, canonical)
-
-    def test_package_schemas_match_canonical_root(self) -> None:
-        names = {
+    def test_published_schema_set_is_complete(self) -> None:
+        names = [
             "payment-submit.payload.schema.json",
             "payment-submit.result.schema.json",
             "workflow-manual.payload.schema.json",
@@ -654,18 +721,46 @@ class MachineArtifactTests(unittest.TestCase):
             "provider-v02-payment-request.schema.json",
             "provider-v02-callback.schema.json",
             "receipt-v1.schema.json",
-        }
+        ]
         for name in names:
             with self.subTest(name=name):
-                package_value = json.loads(
-                    (PACKAGE / "contracts" / "course-1" / name).read_text(
-                        encoding="utf-8"
-                    )
+                self.assertIsInstance(
+                    json.loads(
+                        (PACKAGE / "contracts" / "course-1" / name).read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                    dict,
                 )
-                root_value = json.loads(
-                    (ROOT / "contracts" / "course-1" / name).read_text(encoding="utf-8")
+
+    def test_crlf_is_rejected_at_every_position(self) -> None:
+        protected = {
+            "provider-v02-payment-request.schema.json": ("operationId",),
+            "provider-v02-callback.schema.json": (
+                "providerPaymentId",
+                "operationId",
+                "message",
+                "occurredAt",
+            ),
+            "receipt-v1.schema.json": (
+                "externalRequestId",
+                "messageId",
+                "occurredAt",
+                "providerPaymentId",
+            ),
+        }
+        for name, fields in protected.items():
+            schema = json.loads(
+                (PACKAGE / "contracts" / "course-1" / name).read_text(
+                    encoding="utf-8"
                 )
-                self.assertEqual(package_value, root_value)
+            )
+            for field in fields:
+                pattern = schema["properties"][field]["not"]["pattern"]
+                self.assertIsNone(re.search(pattern, "valid-value"))
+                for value in ("\rprefix", "middle\nvalue", "suffix\r"):
+                    with self.subTest(schema=name, field=field, value=repr(value)):
+                        self.assertIsNotNone(re.search(pattern, value))
 
     def test_provider_payment_id_is_required_string(self) -> None:
         schema = json.loads(
@@ -674,6 +769,34 @@ class MachineArtifactTests(unittest.TestCase):
             )
         )
         self.assertEqual(schema["properties"]["providerPaymentId"]["type"], "string")
+
+
+class WrapperTests(unittest.TestCase):
+    def test_wrapper_documents_external_repository_argument(self) -> None:
+        completed = subprocess.run(
+            [str(PACKAGE / "check.sh"), "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn("--repo PATH", completed.stdout)
+
+    def test_safe_compose_passes_documented_configuration(self) -> None:
+        script = (PACKAGE / "autocheck" / "safe_compose.sh").read_text(
+            encoding="utf-8"
+        )
+        for name in (
+            "COURSE_POSTGRES_PASSWORD",
+            "COURSE_OUTBOX_PASSWORD",
+            "COURSE_INBOX_PASSWORD",
+            "PROVIDER_URL",
+            "OUTBOX_OWNER",
+            "RECEIPT_API_URL",
+        ):
+            with self.subTest(name=name):
+                self.assertIn(f'{name}="${{{name}:-}}"', script)
 
 
 class ReportTests(unittest.TestCase):

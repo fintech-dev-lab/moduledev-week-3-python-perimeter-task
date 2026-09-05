@@ -1,5 +1,7 @@
 # Неделя 3. Памятка участника
 
+Нормативные детали: [полный контракт](../docs/04-week-3.md), [HTTP-контракты](../docs/external-contracts.md), [конфигурация и запуск checker](../docs/configuration.md).
+
 ## Три Python-процесса
 
 | Процесс | Вход | Выход | Не делает |
@@ -49,6 +51,16 @@ Compact sorted JSON подписывается как exact bytes. Не подп
 - stable provider key/body across retries;
 - adapter response mapping 2xx/4xx/5xx;
 - configuration rejects missing secrets/URLs.
+
+## Public checker
+
+Держите репозиторий задания отдельно от решения:
+
+```bash
+./moduledev-week-3-python-perimeter-task/check.sh --repo /path/to/participant-solution
+```
+
+`cli` может быть one-shot service. После clean Compose startup migrations, actions, flow maps и schema `autocheck` должны быть готовы без ручных host-команд.
 
 ## Типовые ошибки
 

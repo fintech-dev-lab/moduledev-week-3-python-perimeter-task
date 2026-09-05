@@ -5,10 +5,10 @@
   "additionalProperties": false,
   "required": ["providerPaymentId", "operationId", "result", "message", "occurredAt"],
   "properties": {
-    "providerPaymentId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"},
-    "operationId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"},
+    "providerPaymentId": {"type": "string", "minLength": 1, "maxLength": 128, "not": {"pattern": "[\\r\\n]"}},
+    "operationId": {"type": "string", "minLength": 1, "maxLength": 128, "not": {"pattern": "[\\r\\n]"}},
     "result": {"enum": ["COMPLETED", "REJECTED"]},
-    "message": {"type": "string", "maxLength": 500},
-    "occurredAt": {"type": "string", "format": "date-time", "maxLength": 64, "pattern": "Z$"}
+    "message": {"type": "string", "maxLength": 500, "not": {"pattern": "[\\r\\n]"}},
+    "occurredAt": {"type": "string", "format": "date-time", "maxLength": 64, "pattern": "Z$", "not": {"pattern": "[\\r\\n]"}}
   }
 }

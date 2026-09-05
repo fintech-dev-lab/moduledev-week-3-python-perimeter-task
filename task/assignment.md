@@ -27,6 +27,8 @@ Python services не имеют host-портов. Adapter не имеет datab
 
 ## Provider compatibility
 
+Точные HTTP status, error codes и правила повторов определены в [публичном внешнем контракте](../docs/external-contracts.md).
+
 Provider принимает body:
 
 ```json
@@ -124,4 +126,4 @@ Course rule `course-limit-v1`: до `100000.00 RUB` включительно —
 - Direct DML integration roles запрещён.
 - Secrets/full messages отсутствуют в repo, images, logs и report.
 
-Полный контракт, criteria, views, test profile и hidden scenarios определены в `04-week-3.md` и `07-autocheck-outline.md` комплекта курса.
+Действующая редакция `week-3.1`, полный контракт, configuration seam и контур проверки опубликованы в [docs](../docs/README.md) этого репозитория. Эта редакция явно заменяет прежний черновик receipt v1.

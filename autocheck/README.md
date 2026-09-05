@@ -3,7 +3,7 @@
 ## Доверенные seams
 
 - Compose services из задания;
-- gateway на host-порту 8080;
+- gateway на host-порту 8080 в исходном contract и на изолированном случайном loopback-порту при проверке;
 - generic HTTP actions;
 - provider v0.2.0 audit;
 - PostgreSQL database `course`, `psql` и read-only schema `autocheck`;
@@ -12,11 +12,19 @@
 
 Checker не вызывает `course.sh` на host и не использует physical tables/ORM/class names.
 
+Запуск из отдельного клона checker:
+
+```bash
+./check.sh --repo /path/to/participant-solution
+```
+
+`cli` обязан быть объявлен, но может успешно завершаться как one-shot service. Checker не требует имени `dotnet` у C# process: technology boundary подтверждается контрактом предыдущих недель, поведением services и неизменностью C# images в hidden run.
+
 ## Public phases
 
 | Phase | Проверка |
 |---|---|
-| `admission` | Safe Compose без host-backed resources, required services, main runtimes и locally built Python image |
+| `admission` | Safe Compose без host-backed resources, required services, Python main runtimes и locally built Python image |
 | `startup` | Cold build, readiness, типизированные views, contract info, functions и roles |
 | `outbox` | Dispatcher stop, durable Outbox, resume, one provider payment |
 | `receipt` | Missing/invalid signature, exact legacy mapping, duplicate/conflict |
@@ -26,7 +34,9 @@ Checker не вызывает `course.sh` на host и не использует
 
 ## Hidden extensions
 
-Hidden checker использует trusted capture sidecars для exact provider request и exact adapter request, early callback, все provider modes, malformed JSON, HTTP classification, concurrent submit/manual calls и deterministic failpoints недели 4.
+Hidden checker недели 3 использует trusted capture sidecars для exact provider request и exact adapter request, early callback, все provider modes, malformed JSON, HTTP classification и concurrent submit/manual calls.
+
+Детерминированные failpoints относятся к будущей приёмке недели 4 и не входят в обязательный объём или оценку недели 3.
 
 ## Report
 

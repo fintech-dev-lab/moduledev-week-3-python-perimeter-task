@@ -5,11 +5,11 @@
   "additionalProperties": false,
   "required": ["externalRequestId", "messageId", "occurredAt", "outcome", "providerPaymentId", "version"],
   "properties": {
-    "externalRequestId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"},
-    "messageId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"},
-    "occurredAt": {"type": "string", "format": "date-time", "maxLength": 64, "pattern": "Z$"},
+    "externalRequestId": {"type": "string", "minLength": 1, "maxLength": 128, "not": {"pattern": "[\\r\\n]"}},
+    "messageId": {"type": "string", "minLength": 1, "maxLength": 128, "not": {"pattern": "[\\r\\n]"}},
+    "occurredAt": {"type": "string", "format": "date-time", "maxLength": 64, "pattern": "Z$", "not": {"pattern": "[\\r\\n]"}},
     "outcome": {"enum": ["COMPLETED", "REJECTED"]},
-    "providerPaymentId": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n]+$"},
+    "providerPaymentId": {"type": "string", "minLength": 1, "maxLength": 128, "not": {"pattern": "[\\r\\n]"}},
     "version": {"const": 1}
   }
 }

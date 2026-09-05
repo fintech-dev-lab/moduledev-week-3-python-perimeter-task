@@ -27,7 +27,7 @@ from typing import Any, Callable, Sequence
 
 
 MANIFEST_VERSION = "week-3-public-report/v1"
-TOOL_VERSION = "week-3-public-check/0.2"
+TOOL_VERSION = "week-3-public-check/0.3"
 PUBLISHED_FIXTURE_DIGEST = (
     "1f83c074ea60ae3941f75dd48e1526030ebdd5e467a66753e1c6a1c06c67c059"
 )
@@ -54,6 +54,7 @@ REQUIRED_SERVICES = {
     "inbox-reconciler",
     "provider-simulator",
 }
+RUNNING_SERVICES = REQUIRED_SERVICES - {"cli"}
 PYTHON_SERVICES = (
     "outbox-dispatcher",
     "receipt-adapter",
@@ -382,7 +383,12 @@ def normalized_receipt(legacy: dict[str, Any]) -> dict[str, Any]:
     if legacy["result"] not in {"COMPLETED", "REJECTED"}:
         raise ValueError("invalid legacy result")
     message = legacy["message"]
-    if not isinstance(message, str) or len(message) > 500:
+    if (
+        not isinstance(message, str)
+        or len(message) > 500
+        or "\r" in message
+        or "\n" in message
+    ):
         raise ValueError("invalid legacy message")
     return {
         "externalRequestId": legacy["operationId"],
@@ -406,6 +412,16 @@ def receipt_bytes(receipt: dict[str, Any]) -> bytes:
 def receipt_signature(secret: str, body: bytes) -> str:
     digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
     return f"v1={digest}"
+
+
+def same_action_result(first: Any, second: Any) -> bool:
+    fields = ("status", "outcome", "result")
+    return (
+        isinstance(first, dict)
+        and isinstance(second, dict)
+        and all(field in first and field in second for field in fields)
+        and all(first[field] == second[field] for field in fields)
+    )
 
 
 def canonical_fixture_digest(root: Path) -> str:
@@ -571,6 +587,28 @@ def _published_ports(service: Any) -> set[int]:
     return result
 
 
+def _target_ports(service: Any) -> set[int]:
+    result: set[int] = set()
+    if not isinstance(service, dict):
+        return result
+    for item in service.get("ports", []) or []:
+        value: Any = None
+        if isinstance(item, dict):
+            value = item.get("target")
+        elif isinstance(item, str):
+            value = item.split("/", 1)[0].rsplit(":", 1)[-1]
+        if isinstance(value, str) and re.fullmatch(r"\d+-\d+", value):
+            start, end = (int(part) for part in value.split("-", 1))
+            if start <= end and end - start <= 1000:
+                result.update(range(start, end + 1))
+            continue
+        try:
+            result.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 def _service_environment(service: Any) -> dict[str, str]:
     if not isinstance(service, dict):
         return {}
@@ -691,6 +729,7 @@ def _secret_distribution_findings(
                 if (
                     secret in value
                     and (str(service_name), key) not in allowed_locations
+                    and (str(service_name), "*") not in allowed_locations
                 ):
                     findings.append(
                         f"{label}: secret is exposed to {service_name}.{key}"
@@ -853,8 +892,8 @@ def _compose_contract_findings(config: dict[str, Any], repo: Path) -> list[str]:
     for name, service in services.items():
         ports = _published_ports(service)
         if name == "gateway":
-            if 8080 not in ports:
-                findings.append("gateway must publish host port 8080")
+            if ports != {8080} or _target_ports(service) != {8080}:
+                findings.append("gateway must publish only host port 8080 to target 8080")
         elif isinstance(service, dict) and service.get("ports"):
             findings.append(f"{name}: only gateway may publish host ports")
     provider = services["provider-simulator"]
@@ -888,6 +927,24 @@ def _compose_contract_findings(config: dict[str, Any], repo: Path) -> list[str]:
     return findings
 
 
+def _runtime_compose_findings(
+    config: dict[str, Any], gateway_port: int
+) -> list[str]:
+    services = config.get("services", {})
+    if not isinstance(services, dict):
+        return ["runtime services must be an object"]
+    gateway = services.get("gateway")
+    findings: list[str] = []
+    if _published_ports(gateway) != {gateway_port}:
+        findings.append("runtime gateway must publish only the selected host port")
+    if _target_ports(gateway) != {8080}:
+        findings.append("runtime gateway must target container port 8080")
+    for name, service in services.items():
+        if name != "gateway" and isinstance(service, dict) and service.get("ports"):
+            findings.append(f"{name}: runtime override must remove host ports")
+    return findings
+
+
 class ComposeHarness:
     def __init__(
         self,
@@ -912,13 +969,19 @@ class ComposeHarness:
         self.commands: list[dict[str, Any]] = []
         self.python_executables: dict[str, str] = {}
 
-    def run(self, command: Sequence[str], *, timeout: float = 120) -> CommandResult:
+    def run(
+        self,
+        command: Sequence[str],
+        *,
+        timeout: float = 120,
+        environment: dict[str, str] | None = None,
+    ) -> CommandResult:
         started = time.monotonic()
         try:
             completed = subprocess.run(
                 list(command),
                 cwd=self.repo,
-                env={**os.environ, **self.environment},
+                env={**os.environ, **self.environment, **(environment or {})},
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -967,7 +1030,12 @@ class ComposeHarness:
         raise ContractError(message)
 
     def compose(
-        self, args: Sequence[str], *, override: bool = True, timeout: float = 120
+        self,
+        args: Sequence[str],
+        *,
+        override: bool = True,
+        timeout: float = 120,
+        environment: dict[str, str] | None = None,
     ) -> CommandResult:
         command = [
             str(self.wrapper),
@@ -979,12 +1047,19 @@ class ComposeHarness:
         if override:
             command.extend(("-f", str(self.override_file)))
         command.extend(args)
-        return self.run(command, timeout=timeout)
+        return self.run(command, timeout=timeout, environment=environment)
 
     def candidate_config(self) -> CommandResult:
         return self.compose(
             ("config", "--format", "json", "--no-env-resolution"),
             override=False,
+            timeout=30,
+            environment={"COURSE_GATEWAY_PORT": "8080"},
+        )
+
+    def runtime_config(self) -> CommandResult:
+        return self.compose(
+            ("config", "--format", "json", "--no-env-resolution"),
             timeout=30,
         )
 
@@ -1290,6 +1365,18 @@ class PublicChecker:
         self.hmac_secret = secrets.token_urlsafe(40)
         self.capability = secrets.token_urlsafe(24)
         self.audit_token = secrets.token_urlsafe(24)
+        self.database_secrets = {
+            name: secrets.token_urlsafe(32)
+            for name in (
+                "COURSE_POSTGRES_PASSWORD",
+                "COURSE_MIGRATOR_PASSWORD",
+                "COURSE_PUBLISHER_PASSWORD",
+                "COURSE_RUNTIME_PASSWORD",
+                "COURSE_WORKER_PASSWORD",
+                "COURSE_OUTBOX_PASSWORD",
+                "COURSE_INBOX_PASSWORD",
+            )
+        }
         self.issuer = "moduledev-course"
         self.audience = "moduledev-api"
         self.callback_base = ""
@@ -1324,10 +1411,14 @@ class PublicChecker:
             "COURSE_JWT_ISSUER": self.issuer,
             "COURSE_JWT_AUDIENCE": self.audience,
             "COURSE_JWT_SIGNING_KEY": self.jwt_secret,
+            "PROVIDER_URL": "http://provider-simulator:8081",
+            "OUTBOX_OWNER": "outbox-dispatcher",
             "PROVIDER_CALLBACK_CAPABILITY": self.capability,
             "PROVIDER_CALLBACK_TOKEN": self.receipt_token,
             "PROVIDER_HMAC_SECRET": self.hmac_secret,
+            "RECEIPT_API_URL": "http://gateway:8080/api/receipt/accept",
             "PROVIDER_AUDIT_TOKEN": self.audit_token,
+            **self.database_secrets,
         }
         self.sensitive = (
             self.jwt_secret,
@@ -1337,6 +1428,7 @@ class PublicChecker:
             self.receipt_token,
             self.client_token,
             self.reviewer_token,
+            *self.database_secrets.values(),
         )
         self.harness: ComposeHarness | None = None
         self.environment = environment
@@ -1648,12 +1740,55 @@ class PublicChecker:
                         self.audit_token,
                         {("provider-simulator", "AUDIT_TOKEN")},
                     ),
+                    "postgres-password": (
+                        self.database_secrets["COURSE_POSTGRES_PASSWORD"],
+                        {("postgres", "*")},
+                    ),
+                    "migrator-password": (
+                        self.database_secrets["COURSE_MIGRATOR_PASSWORD"],
+                        {("postgres", "*"), ("cli", "*")},
+                    ),
+                    "publisher-password": (
+                        self.database_secrets["COURSE_PUBLISHER_PASSWORD"],
+                        {("postgres", "*"), ("cli", "*")},
+                    ),
+                    "runtime-password": (
+                        self.database_secrets["COURSE_RUNTIME_PASSWORD"],
+                        {("postgres", "*"), ("api", "*")},
+                    ),
+                    "worker-password": (
+                        self.database_secrets["COURSE_WORKER_PASSWORD"],
+                        {("postgres", "*"), ("worker-a", "*"), ("worker-b", "*")},
+                    ),
+                    "outbox-password": (
+                        self.database_secrets["COURSE_OUTBOX_PASSWORD"],
+                        {("postgres", "*"), ("outbox-dispatcher", "*")},
+                    ),
+                    "inbox-password": (
+                        self.database_secrets["COURSE_INBOX_PASSWORD"],
+                        {("postgres", "*"), ("inbox-reconciler", "*")},
+                    ),
                 },
             )
         )
         self._record("compose-contract", "admission", [], findings)
         self.callback_base = _provider_callback_base(config)
         self._write_override(config)
+        runtime_config_result = self.h.runtime_config()
+        if not runtime_config_result.ok:
+            self.h.require_docker_result(
+                runtime_config_result, "effective Compose config is invalid"
+            )
+        try:
+            runtime_config = json.loads(runtime_config_result.stdout)
+        except json.JSONDecodeError as error:
+            raise ContractError("effective Compose config is not JSON") from error
+        self._record(
+            "runtime-compose-contract",
+            "admission",
+            [],
+            _runtime_compose_findings(runtime_config, self.gateway_port),
+        )
         self.cleanup_armed = True
         pull = self.h.run(("docker", "pull", PROVIDER_IMAGE), timeout=180)
         if not pull.ok:
@@ -1668,7 +1803,7 @@ class PublicChecker:
         if not up.ok:
             self.h.require_docker_result(up, "candidate stack did not start")
         self.h.wait_gateway()
-        for service in REQUIRED_SERVICES:
+        for service in RUNNING_SERVICES:
             self.h.container_id(service)
         python_ids = {self.h.image_id(service) for service in PYTHON_SERVICES}
         self._record("python-single-image", "admission", 1, len(python_ids))
@@ -1686,14 +1821,6 @@ class PublicChecker:
                 lambda value: tuple(int(part) for part in value.split("."))
                 >= (3, 12, 0),
                 ".".join(str(part) for part in version),
-            )
-        for service in CSHARP_SERVICES:
-            executable = Path(self.h.main_process_executable(service)).name.lower()
-            self._record(
-                f"csharp-runtime-{service}",
-                "admission",
-                "dotnet",
-                executable,
             )
         self.image_ids = {
             service: self.h.image_id(service)
@@ -2008,7 +2135,8 @@ class PublicChecker:
             and audit_json is not None
             and audit_json.get("operationId") == external_id
             and audit_json.get("idempotencyKey") == external_id
-            and audit_json.get("requestCount") == 1
+            and isinstance(audit_json.get("requestCount"), int)
+            and audit_json.get("requestCount", 0) >= 1
             and audit_json.get("paymentCount") == 1,
         )
         evidence = self.h.psql_rows(
@@ -2129,7 +2257,7 @@ class PublicChecker:
             200 <= first.status < 300
             and duplicate.status == first.status
             and first_json is not None
-            and duplicate_json == first_json,
+            and same_action_result(first_json, duplicate_json),
         )
         conflict_json = conflict.json()
         self._record(
@@ -2285,7 +2413,7 @@ class PublicChecker:
             accepted.status == 200
             and repeated.status == 200
             and accepted_json is not None
-            and repeated_json == accepted_json,
+            and same_action_result(accepted_json, repeated_json),
         )
         self._record("manual-changed-repeat-conflict", "review", 409, conflict.status)
         completed = self._wait_operation(manual_operation, "COMPLETED")

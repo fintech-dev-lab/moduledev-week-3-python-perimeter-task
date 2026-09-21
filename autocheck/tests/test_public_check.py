@@ -27,6 +27,22 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 PACKAGE = Path(__file__).resolve().parents[2]
 
 
+class PackagingTests(unittest.TestCase):
+    def test_documented_shell_entrypoints_are_executable(self) -> None:
+        names = ("check.sh", "autocheck/check.sh", "autocheck/safe_compose.sh")
+        result = subprocess.run(
+            ["git", "ls-files", "--stage", "--error-unmatch", "--", *names],
+            cwd=PACKAGE, capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            rows = result.stdout.splitlines()
+            self.assertEqual(len(rows), len(names))
+            self.assertTrue(all(row.split()[0] == "100755" for row in rows), rows)
+        else:
+            for name in names:
+                self.assertTrue((PACKAGE / name).stat().st_mode & 0o111, name)
+
+
 class FixtureTests(unittest.TestCase):
     def test_published_fixture_digest_is_valid(self) -> None:
         fixture = public_check.load_fixture(FIXTURES)

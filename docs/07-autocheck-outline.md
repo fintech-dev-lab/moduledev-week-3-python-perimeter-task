@@ -486,7 +486,7 @@ Failpoints включаются только в закрытом test profile и
 | Lease job | 2 секунды |
 | Poll interval worker | не более 100 мс |
 | Provider timeout | 500 мс |
-| Максимум попыток Outbox | 3 |
+| Максимум попыток Outbox | 4, включая первую |
 | Задержки Outbox | 200, 400, 800 мс |
 | Inbox reconciliation | не более 500 мс |
 | Provider callback retry | 200 мс |
